@@ -5,47 +5,50 @@ import random
 
 @cocotb.test()
 async def test_project(dut):
-    dut._log.info("Start")
+    dut._log.info("Starting the test...")
 
-    # Set the clock period to 10 us (100 KHz)
+    # Set up the clock with a period of 10 us (100 KHz)
     clock = Clock(dut.clk, 10, units="us")
     cocotb.start_soon(clock.start())
 
-    dut._log.info("Test project behavior")
+    # Reset
+    dut.rst_n.value = 0
+    await ClockCycles(dut.clk, 5)  # Hold reset low for 5 cycles
+    dut.rst_n.value = 1
 
-    # Set the initial input values you want to test (original test)
+    # Set the initial input values
     dut.a.value = 13
     dut.b.value = 10
 
-    # Wait for one clock cycle to see the output values
+    # Wait for a few clock cycles to observe the output
     await ClockCycles(dut.clk, 10)
 
-    # Log and assert the expected output for the initial values
-    dut._log.info(f"value of outputs are: {dut.sum.value} and {dut.carry_out.value}.")
-    assert dut.sum.value == 7 and dut.carry_out.value == 1 
+    # Check the expected sum and carry out
+    dut._log.info(f"Initial Test: sum={dut.sum.value}, carry_out={dut.carry_out.value}")
+    assert dut.sum.value == 7, f"Initial test failed: expected sum=7, got {dut.sum.value}"
+    assert dut.carry_out.value == 1, f"Initial test failed: expected carry_out=1, got {dut.carry_out.value}"
 
-    # Add random 1000 test cases
+    # Random testing for 1000 cases
     for i in range(1000):
-        # Generate random values for a and b within the 4-bit range (0 to 15)
-        a = random.randint(0, 15)
-        b = random.randint(0, 15)
+        a = random.randint(0, 15)  # 4-bit random value
+        b = random.randint(0, 15)  # 4-bit random value
 
-        # Set the random input values
+        # Apply random inputs
         dut.a.value = a
         dut.b.value = b
 
-        # Wait for 10 clock cycles to settle
+        # Wait for the output to stabilize
         await ClockCycles(dut.clk, 10)
 
-        # Calculate the expected sum and carry_out
-        expected_sum = (a + b) & 0xF  # Lower 4 bits for sum
-        expected_carry_out = (a + b) >> 4  # Carry out
+        # Expected values
+        expected_sum = (a + b) & 0xF  # Sum is the lower 4 bits
+        expected_carry_out = (a + b) >> 4  # Carry out is the 5th bit
 
-        # Log the values for debugging
-        dut._log.info(f"Test {i + 1}: a={a}, b={b}, sum={dut.sum.value}, carry_out={dut.carry_out.value}")
+        # Log the results
+        dut._log.info(f"Test {i+1}: a={a}, b={b}, sum={dut.sum.value}, carry_out={dut.carry_out.value}")
 
-        # Assert to check if the output matches the expected values
-        assert dut.sum.value == expected_sum, f"Test {i + 1} failed for a={a}, b={b}: expected sum={expected_sum}, got {dut.sum.value}"
-        assert dut.carry_out.value == expected_carry_out, f"Test {i + 1} failed for a={a}, b={b}: expected carry_out={expected_carry_out}, got {dut.carry_out.value}"
+        # Assertions for sum and carry
+        assert dut.sum.value == expected_sum, f"Test {i+1} failed: a={a}, b={b}, expected sum={expected_sum}, got {dut.sum.value}"
+        assert dut.carry_out.value == expected_carry_out, f"Test {i+1} failed: a={a}, b={b}, expected carry_out={expected_carry_out}, got {dut.carry_out.value}"
 
-    dut._log.info("All tests passed.")
+    dut._log.info("All tests passed successfully!")
