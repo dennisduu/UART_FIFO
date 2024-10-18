@@ -1,11 +1,4 @@
-/*
- * Copyright (c) 2024 Your Name
- * SPDX-License-Identifier: Apache-2.0
-
-
-`default_nettype none
-
-module tt_um_example (
+module tt_uart_fifo (
     input  wire [7:0] ui_in,    // Dedicated inputs
     output wire [7:0] uo_out,   // Dedicated outputs
     input  wire [7:0] uio_in,   // IOs: Input path
@@ -16,80 +9,77 @@ module tt_um_example (
     input  wire       rst_n     // reset_n - low to reset
 );
 
-  // All output pins must be assigned. If not used, assign to 0.
-  assign uo_out  = ui_in + uio_in;  // Example: ou_out is the sum of ui_in and uio_in
-  assign uio_out = 0;
-  assign uio_oe  = 0;
-
-  // List all unused inputs to prevent warnings
-  wire _unused = &{ena, clk, rst_n, 1'b0};
-
-endmodule
-
- */
-
-
-/*
- * Copyright (c) 2024 Weihua Xiao
- * SPDX-License-Identifier: Apache-2.0
- */
-
-`default_nettype none
-
-module tt_um_koggestone_adder4 (
-    input  wire [7:0] ui_in,    // Dedicated inputs
-    output wire [7:0] uo_out,   // Dedicated outputs
-    input  wire [7:0] uio_in,   // IOs: Input path
-    output wire [7:0] uio_out,  // IOs: Output path
-    output wire [7:0] uio_oe,   // IOs: Enable path (active high: 0=input, 1=output)
-    input  wire       ena,      // always 1 when the design is powered, so you can ignore it
-    input  wire       clk,      // clock
-    input  wire       rst_n     // reset_n - low to reset
-);
-
-  wire [3:0] a, b;
-  wire [3:0] sum;
-  wire carry_out;
+  // Signals for UART
+  wire uart_rx;   // UART receive line
+  wire uart_tx;   // UART transmit line
+  wire [7:0] rx_data; // Data received from UART
+  wire rx_ready;  // Signal indicating data is ready to be read
+  wire tx_ready;  // Signal indicating UART is ready to transmit
+  wire fifo_empty, fifo_full;
   
-  assign a = ui_in[3:0];
-  assign b = ui_in[7:4];
-   
+  // FIFO buffer
+  reg [7:0] fifo_data_in;
+  wire [7:0] fifo_data_out;
+  reg fifo_write, fifo_read;
+  
+  // UART receiver instance
+  uart_rx_module uart_rx_inst (
+      .clk(clk),
+      .rst_n(rst_n),
+      .rx(uart_rx),
+      .data_out(rx_data),
+      .data_ready(rx_ready)
+  );
+  
+  // UART transmitter instance
+  uart_tx_module uart_tx_inst (
+      .clk(clk),
+      .rst_n(rst_n),
+      .tx(uart_tx),
+      .data_in(fifo_data_out),
+      .tx_start(fifo_read),
+      .tx_ready(tx_ready)
+  );
+  
+  // FIFO buffer instance
+  fifo_buffer fifo_inst (
+      .clk(clk),
+      .rst_n(rst_n),
+      .data_in(fifo_data_in),
+      .write_en(fifo_write),
+      .read_en(fifo_read),
+      .data_out(fifo_data_out),
+      .empty(fifo_empty),
+      .full(fifo_full)
+  );
 
-  wire [3:0] p; // Propagate
-  wire [3:0] g; // Generate
-  wire [3:0] c; // Carry
+  // Control logic for FIFO and UART
+  always @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+        fifo_write <= 0;
+        fifo_read <= 0;
+        fifo_data_in <= 0;
+    end else begin
+        if (rx_ready && !fifo_full) begin
+            fifo_data_in <= rx_data;
+            fifo_write <= 1;
+        end else begin
+            fifo_write <= 0;
+        end
 
-  // Precompute generate and propagate signals
-  assign p = a ^ b; // Propagate
-  assign g = a & b; // Generate
+        if (tx_ready && !fifo_empty) begin
+            fifo_read <= 1;
+        end else begin
+            fifo_read <= 0;
+        end
+    end
+  end
 
-  // Stage 1: Compute generate signals for neighbor 1-bit pairs
-  wire g1_1, g1_2, g1_3;
-  wire p1_1, p1_2, p1_3; 
-  assign g1_1 = g[1] | (p[1] & g[0]);   // Combine 1st and 0th bits
-  assign g1_2 = g[2] | (p[2] & g[1]);   // Combine 2nd and 1st bits
-  assign p1_2 = p[2] & p[1];	
-  assign g1_3 = g[3] | (p[3] & g[2]);   // Combine 3rd and 2nd bits
-  assign p1_3 = p[3] & p[2];
+  // Assign outputs
+  assign uart_rx = uio_in[0];   // UART RX on uio_in[0]
+  assign uio_out[0] = uart_tx;  // UART TX on uio_out[0]
+  assign uo_out = 8'h00;        // Not used, assigned to 0
+  assign uio_oe = 8'h01;        // Enable only uio_out[0] for UART TX
+  wire _unused = &{ena, 1'b0};  // Prevent unused signal warnings
 
-  // Stage 2: Compute generate signals for 2-bit groups
-  wire g2_2, g2_3;
-  assign g2_2 = g1_2 | (p1_2 & g[0]);   // Combine 2-bit group (2nd and 0th bits)
-  assign g2_3 = g1_3 | (p1_3 & g1_1);   // Combine 2-bit group (3rd and 1st bits)
-
-  // Compute final carry signals
-  assign c[0] = 0;                      // No carry into the first bit
-  assign c[1] = g[0];                   // Carry for 1st bit
-  assign c[2] = g1_1;                   // Carry for 2nd bit
-  assign c[3] = g2_2;                   // Carry for 3rd bit
-  assign carry_out = g2_3;              // Carry-out
-
-  // Sum computation
-  assign sum = p ^ c;                               // XOR of propagate and carry
-
-  assign uo_out[3:0] = sum;
-  assign uo_out[4] = carry_out; 
-  assign uo_out[7:5] = 3'b000;
-  assign uio_out = 8'b00000000;
-  assign uio_oe = 8'b00000000;
 endmodule
