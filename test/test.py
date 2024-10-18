@@ -1,54 +1,47 @@
 import cocotb
 from cocotb.clock import Clock
-from cocotb.triggers import ClockCycles
+from cocotb.triggers import ClockCycles, RisingEdge
 import random
 
 @cocotb.test()
-async def test_project(dut):
-    dut._log.info("Starting the test...")
+async def test_uart_fifo(dut):
+    dut._log.info("Start UART+FIFO test")
 
-    # Set up the clock with a period of 10 us (100 KHz)
-    clock = Clock(dut.clk, 10, units="us")
+    # Set the clock period to 10 ns (100 MHz)
+    clock = Clock(dut.clk, 10, units="ns")
     cocotb.start_soon(clock.start())
 
-    # Reset
+    # Reset the design
     dut.rst_n.value = 0
-    await ClockCycles(dut.clk, 5)  # Hold reset low for 5 cycles
+    await ClockCycles(dut.clk, 10)  # Hold reset for 10 clock cycles
     dut.rst_n.value = 1
+    dut.ena.value = 1  # Enable the module
 
-    # Set the initial input values
-    dut.a.value = 13
-    dut.b.value = 10
+    # UART RX test - Send data into the FIFO
+    for i in range(10):
+        # Send random data into UART RX (uio_in)
+        rx_data = random.randint(0, 255)
+        dut.uio_in.value = rx_data
 
-    # Wait for a few clock cycles to observe the output
-    await ClockCycles(dut.clk, 10)
-
-    # Check the expected sum and carry out
-    dut._log.info(f"Initial Test: sum={dut.sum.value}, carry_out={dut.carry_out.value}")
-    assert dut.sum.value == 7, f"Initial test failed: expected sum=7, got {dut.sum.value}"
-    assert dut.carry_out.value == 1, f"Initial test failed: expected carry_out=1, got {dut.carry_out.value}"
-
-    # Random testing for 1000 cases
-    for i in range(1000):
-        a = random.randint(0, 15)  # 4-bit random value
-        b = random.randint(0, 15)  # 4-bit random value
-
-        # Apply random inputs
-        dut.a.value = a
-        dut.b.value = b
-
-        # Wait for the output to stabilize
+        # Wait for a few clock cycles to allow data to enter FIFO
         await ClockCycles(dut.clk, 10)
 
-        # Expected values
-        expected_sum = (a + b) & 0xF  # Sum is the lower 4 bits
-        expected_carry_out = (a + b) >> 4  # Carry out is the 5th bit
+        dut._log.info(f"Sent {rx_data:02x} to UART RX")
 
-        # Log the results
-        dut._log.info(f"Test {i+1}: a={a}, b={b}, sum={dut.sum.value}, carry_out={dut.carry_out.value}")
+    # UART TX test - Read data out of the FIFO via UART TX
+    for i in range(10):
+        # Wait for data to be ready on UART TX (uio_out)
+        await RisingEdge(dut.uio_oe)  # Wait until TX line is enabled
+        tx_data = dut.uio_out.value.integer
 
-        # Assertions for sum and carry
-        assert dut.sum.value == expected_sum, f"Test {i+1} failed: a={a}, b={b}, expected sum={expected_sum}, got {dut.sum.value}"
-        assert dut.carry_out.value == expected_carry_out, f"Test {i+1} failed: a={a}, b={b}, expected carry_out={expected_carry_out}, got {dut.carry_out.value}"
+        dut._log.info(f"Received {tx_data:02x} from UART TX")
+        await ClockCycles(dut.clk, 10)  # Wait between reads
 
-    dut._log.info("All tests passed successfully!")
+    # Optional: Add more random test cases for edge case testing
+    for i in range(1000):
+        rx_data = random.randint(0, 255)
+        dut.uio_in.value = rx_data
+        await ClockCycles(dut.clk, 10)
+        await RisingEdge(dut.uio_oe)
+        tx_data = dut.uio_out.value.integer
+        assert tx_data == rx_data, f"Data mismatch: Sent {rx_data:02x}, received {tx_data:02x}"
