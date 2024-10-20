@@ -7,7 +7,7 @@ module tb ();
   initial begin
     $dumpfile("tb.vcd");
     $dumpvars(0, tb);
-    #1;
+    #10;
   end
 
   // Wire up the inputs and outputs:
@@ -20,10 +20,8 @@ module tb ();
   wire [7:0] uio_out; // UART TX output
   wire [7:0] uio_oe; // Enable for the UART TX line
   
-`ifdef GL_TEST
-  wire VPWR = 1'b1;
-  wire VGND = 1'b0;
-`endif
+   supply1 VPWR;
+   supply0 VGND;
 
   // Instantiate the UART + FIFO module
   tt_uart_fifo user_project (
