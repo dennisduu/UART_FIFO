@@ -24,7 +24,7 @@ module tb ();
    supply0 VGND;
 
   // Instantiate the UART + FIFO module
-  tt_uart_fifo user_project (
+  tt_um_uart_fifo user_project (
       // Include power ports for the Gate Level test:
 `ifdef GL_TEST
       .VPWR(VPWR),
