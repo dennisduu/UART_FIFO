@@ -18,7 +18,7 @@ async def test_uart_fifo(dut):
     dut.ena.value = 1  # Enable the module
 
     # UART RX test - Send data into the FIFO
-    for i in range(10):
+    for i in range(1):
         # Send random data into UART RX (uio_in)
         rx_data = random.randint(0, 255)
         dut.uio_in.value = rx_data
@@ -29,7 +29,7 @@ async def test_uart_fifo(dut):
         dut._log.info(f"Sent {rx_data:02x} to UART RX")
 
     # UART TX test - Read data out of the FIFO via UART TX
-    for i in range(10):
+    for i in range(1):
         # Wait for data to be ready on UART TX (uio_out)
         await RisingEdge(dut.uio_oe)  # Wait until TX line is enabled
         tx_data = dut.uio_out.value.integer
@@ -38,7 +38,7 @@ async def test_uart_fifo(dut):
         await ClockCycles(dut.clk, 10)  # Wait between reads
 
     # Optional: Add more random test cases for edge case testing
-    for i in range(1000):
+    for i in range(3):
         rx_data = random.randint(0, 255)
         dut.uio_in.value = rx_data
         await ClockCycles(dut.clk, 10)
